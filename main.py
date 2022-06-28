@@ -1,7 +1,7 @@
 import math
 import pygame
-from axis import Axis
 
+from axis import Axis
 from lib import *
 from dot import Dot
 from line import Line
