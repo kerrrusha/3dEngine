@@ -6,16 +6,18 @@ from dot import Dot
 from line import Line
 from camera import Camera
 from fontImpoved import FontImproved
-from objectController import ObjectController
+from objectController import Direction, ObjectController
+from shape import Shape
 
 class Scene:
-    def __init__(self, screen : pygame.Surface, objects=[]) -> None:
+    def __init__(self, screen : pygame.Surface, objects=[], cameraPos=Dot(), horizontalAngle=0, verticalAngle=0) -> None:
         self.screen = screen
         
         self.objects = objects
         self.objectController = ObjectController(self.objects)
-        
-        self.camera = Camera()
+        self.shapes = []
+
+        self.camera = Camera(cameraPos, horizontalAngle, verticalAngle)
 
         self.frameRect = self.calculateFrameRect()
 
@@ -39,24 +41,49 @@ class Scene:
         for obj in self.objects:
             if type(obj) is Dot and self.camera.dotIsInFrame(obj):
                 objectsInFrame.append(obj)
+            if type(obj) is Line and self.camera.lineIsInFrame(obj):
+                objectsInFrame.append(obj)
         return objectsInFrame
 
+    def addShape(self, shape : Shape):
+        self.shapes.append(shape)
+        self.objects.extend(shape.dots)
+        self.objectController.update(shapes=self.shapes)
+
+    def addShapes(self, shapes : list[Shape]):
+        for sh in shapes:
+            self.addShape(sh)
+
     def update(self):
-        # self.objectController.rotateAll(Dot(10, 0, 25))
-        self.objectController.moveForwardAll()
+        self.objectController.rotateCircles(direction=Direction.backward, angleStep=0.5)
+        # self.objectController.moveDotsForward()
 
     def draw(self, debug=False, fps=None):
         for obj in self.getObjectsInFrame():
             if type(obj) is Dot:
                 dotFrameXY = self.camera.dotToFrameXY(obj)
-                distance = self.camera.distanceTo(obj)
-                scale = self.camera.scaleTo(obj)
+                distance = self.camera.distanceToDot(obj)
+                scale = self.camera.scaleToDot(obj)
                 
                 dotScreenXY = self.toScreenXY(dotFrameXY)
 
-                MAX_RADIUS = 3
+                MAX_RADIUS = 1
                 radius = MAX_RADIUS*scale if MAX_RADIUS*scale >= 1 else 1
                 pygame.draw.circle(self.screen, colors['white'], dotScreenXY, radius)
+            if type(obj) is Line:
+                lineframePartLine = self.camera.lineToInframePartLine(obj)
+                if lineframePartLine is None:
+                    continue
+
+                lineFrameXY = self.camera.dotToFrameXY(lineframePartLine.startDot),  self.camera.dotToFrameXY(lineframePartLine.endDot)
+                distance = self.camera.distanceToLine(obj)
+                scale = self.camera.scaleToLine(obj)
+
+                lineScreenXY = self.toScreenXY(lineFrameXY[0]), self.toScreenXY(lineFrameXY[1])
+                
+                MAX_WIDTH = 3
+                width = MAX_WIDTH*scale if MAX_WIDTH*scale >= 1 else 1
+                pygame.draw.line(self.screen, colors['white'], lineScreenXY[0], lineScreenXY[1], int(width))
 
         if debug:
             msgList = []

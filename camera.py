@@ -49,17 +49,24 @@ class Camera:
             Line(self.position, maxDistanceDots[3])
         ]
 
-    def distanceTo(self, dot : Dot):
-        A, B, C, D = self.frameLines[0].endDot, self.frameLines[1].endDot, self.frameLines[2].endDot, self.frameLines[3].endDot
+    def distanceToDot(self, dot : Dot) -> float:
+        A, B, C, D = self.getFrameABCD()
         n = np.cross( A.subtract(C).toList() , 
                                 B.subtract(D).toList() )
         n = n / np.linalg.norm(n)
         d = self.maxDistance - np.dot(dot.subtract(A).toList(), n)
+        return float(d)
+    
+    def distanceToLine(self, line : Line):
+        return min(self.distanceToDot(line.startDot), self.distanceToDot(line.endDot))
 
-        return d
+    def scaleToDot(self, dot : Dot) -> float:
+        distance = self.distanceToDot(dot)
+        scale = 1 - distance / self.maxDistance
+        return scale
 
-    def scaleTo(self, dot : Dot) -> float:
-        distance = self.distanceTo(dot)
+    def scaleToLine(self, line : Line) -> float:
+        distance = self.distanceToLine(line)
         scale = 1 - distance / self.maxDistance
         return scale
 
@@ -67,20 +74,20 @@ class Camera:
         """
             Determine if dot is inside the camera frame
         """
+        if dot is None:
+            return False
         if self.position.equal(dot):
             return False
-        if self.distanceTo(dot) > self.maxDistance:
+        if self.distanceToDot(dot) > self.maxDistance:
+            return False
+        if np.dot(self.getMaxDistanceDot().toList(), dot.toList()) < 0:
             return False
 
         O = self.position
-        A, B, C, D = self.frameLines[0].endDot, self.frameLines[1].endDot, self.frameLines[2].endDot, self.frameLines[3].endDot
+        A, B, C, D = self.getFrameABCD()
 
         # нормали граней пирамиды
-        noab = np.cross(A.subtract(O).toList(), B.subtract(O).toList())
-        nobc = np.cross(B.subtract(O).toList(), C.subtract(O).toList())
-        nocd = np.cross(C.subtract(O).toList(), D.subtract(O).toList())
-        noad = np.cross(D.subtract(O).toList(), A.subtract(O).toList())
-        nabc = np.cross(C.subtract(B).toList(), B.subtract(B).toList())
+        noab, nobc, nocd, noad, nabc = self.getFramePyramidSurfaceNormales()
 
         directionVector = dot.subtract(O).toList()
         r = np.dot(directionVector, noab)
@@ -101,11 +108,80 @@ class Camera:
         
         return insideOAB and insideOBC and insideOCD and insideOAD and insideABC
 
-    def dotToFrameXY(self, dot : Dot) -> tuple:
-        distance = self.distanceTo(dot)
-        scale = 1 - self.scaleTo(dot)
+    def lineToInframePartLine(self, line : Line) -> Line:
+        A, B = None, None
         
-        A, B, C, D = self.frameLines[0].endDot, self.frameLines[1].endDot, self.frameLines[2].endDot, self.frameLines[3].endDot
+        if self.dotIsInFrame(line.startDot):
+            A = line.startDot
+        if self.dotIsInFrame(line.endDot):
+            B = line.endDot
+        if A is not None and B is not None:
+            return Line(A, B)
+        
+        # плоскости пирамиды кадра формата (вектор нормали; точка плоскости)
+        surfaces = self.getFramePyramidSurfaces()
+        for surf in surfaces:
+            planeNormalVector = surf[0]
+            planePoint = surf[1]
+            dotIntersects = Geometry.lineIntersectsPlane(line, planeNormalVector, planePoint)
+            if dotIntersects is None:
+                continue
+            if self.dotIsInFrame(dotIntersects):
+                if A is None:
+                    A = dotIntersects
+                elif not A.equal(dotIntersects):
+                    B = dotIntersects
+        if A is None and B is None:
+            return None
+        if A is None:
+            return Line(B, B)
+        if B is None:
+            return Line(A, A)
+        if A.equal(B):
+            return Line(A, A)
+        return Line(A, B)
+    
+    def lineIsInFrame(self, line : Line) -> bool:
+        surfaces = self.getFramePyramidSurfaces()
+        for surf in surfaces:
+            planePoint = surf[0]
+            planeNormalVector = surf[1]
+            dotIntersects = Geometry.lineIntersectsPlane(line, planePoint, planeNormalVector)
+            if self.dotIsInFrame(dotIntersects) is not None:
+                return True
+        return False
+
+    def getMaxDistanceDot(self) -> Dot:
+        A, B, C, D = self.getFrameABCD()
+        return A.add(C.subtract(A).divide(2))
+
+    def getFrameABCD(self) -> tuple:
+        return self.frameLines[0].endDot, self.frameLines[1].endDot, self.frameLines[2].endDot, self.frameLines[3].endDot
+    
+    def getFramePyramidSurfaceNormales(self) -> tuple:
+        A, B, C, D = self.getFrameABCD()
+        O = self.position
+        noab = np.cross(A.subtract(O).toList(), B.subtract(O).toList())
+        nobc = np.cross(B.subtract(O).toList(), C.subtract(O).toList())
+        nocd = np.cross(C.subtract(O).toList(), D.subtract(O).toList())
+        noad = np.cross(D.subtract(O).toList(), A.subtract(O).toList())
+        nabc = np.cross(C.subtract(B).toList(), B.subtract(B).toList())
+        return noab, nobc, nocd, noad, nabc
+
+    def getFramePyramidSurfaces(self) -> list:
+        A, B, C, D = self.getFrameABCD()
+        O = self.position
+
+        # нормали граней пирамиды
+        noab, nobc, nocd, noad, nabc = self.getFramePyramidSurfaceNormales()
+        surfaces = [(noab, A), (nobc, B), (nocd, C), (noad, D), (nabc, A)]
+        return surfaces
+
+    def dotToFrameXY(self, dot : Dot) -> tuple:
+        distance = self.distanceToDot(dot)
+        scale = 1 - self.scaleToDot(dot)
+        
+        A, B, C, D = self.getFrameABCD()
         maxDistanceCenter = Geometry.calculateRectangleCenter(A, B, C, D)
         # прямоугольник содержащий точку (сечение пирамиды кадра)
         center = self.position.add(maxDistanceCenter.subtract(self.position).multiply(scale))

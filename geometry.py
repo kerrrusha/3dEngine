@@ -1,3 +1,4 @@
+import numpy as np
 from dot import Dot
 from line import Line
 from parser import Parser
@@ -58,3 +59,28 @@ class Geometry:
             dotAngle = 2*math.pi - dotAngle
 
         return dotAngle
+
+    def lineIntersectsPlane(line : Line, planeNormalVector : list, planePoint : Dot, epsilon=1e-6) -> Dot:
+        """
+        Return a Dot intersection or None (when the intersection can't be found).
+        """
+        p0 = line.startDot
+        p1 = line.endDot
+
+        u = p1.subtract(p0)
+        dot = np.dot(planeNormalVector, u.toList())
+
+        # отрезок параллелен плоскости
+        if abs(dot) <= epsilon:
+            return None
+        
+        w = p0.subtract(planePoint)
+        # если 'factor' в пределах (0 - 1), то отрезок пересекает плоскость
+        # иначе:
+        #  < 0.0: плоскость сзади начала отрезка.
+        #  > 1.0: плоскость спереди конца отрезка.
+        factor = -np.dot(planeNormalVector, w.toList()) / dot
+        u = u.multiply(factor)
+        intersectDot = p0.add(u)
+        # print(intersectDot)
+        return intersectDot

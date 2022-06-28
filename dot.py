@@ -49,7 +49,7 @@ class Dot:
 
         radius = self.distanceTo(dotCenter)
 
-        deltaW, deltaH = None
+        deltaW, deltaH = None, None
         if axis == Axis.z:
             deltaW = (self.x - dotCenter.x)
             deltaH = (self.y - dotCenter.y)
@@ -98,3 +98,6 @@ class Dot:
 
     def toList(self):
         return [self.x, self.y, self.z]
+
+    def __str__(self):
+        return "({:.3f}, {:.3f}, {:.3f})".format(self.x,self.y,self.z)
